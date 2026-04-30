@@ -15,22 +15,12 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // === Database ===
-var databaseProvider = builder.Configuration["Database:Provider"] ?? "SqlServer";
 builder.Services.AddDbContext<CollegeERPDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? (databaseProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase)
-            ? "Data Source=CollegeERP.db"
-            : "Server=(localdb)\\MSSQLLocalDB;Database=CollegeERPDb;Trusted_Connection=true;");
+        ?? "Data Source=/tmp/CollegeERP.db";
 
-    if (databaseProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
-    {
-        options.UseSqlite(connectionString);
-    }
-    else
-    {
-        options.UseSqlServer(connectionString);
-    }
+    options.UseSqlite(connectionString);
 });
 
 // === Repositories (Generic) ===
