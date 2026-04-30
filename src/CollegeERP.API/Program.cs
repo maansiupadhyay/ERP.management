@@ -1,7 +1,6 @@
 using System.Text;
 using CollegeERP.Application.Interfaces;
 using CollegeERP.Application.Services;
-using CollegeERP.Domain.Entities;
 using CollegeERP.Infrastructure.Auth;
 using CollegeERP.Infrastructure.Data;
 using CollegeERP.Infrastructure.Repositories;
@@ -14,7 +13,7 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// === Database ===
+// === Database (SQLite for Render) ===
 builder.Services.AddDbContext<CollegeERPDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -23,7 +22,7 @@ builder.Services.AddDbContext<CollegeERPDbContext>(options =>
     options.UseSqlite(connectionString);
 });
 
-// === Repositories (Generic) ===
+// === Repositories ===
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 // === Services ===
@@ -39,12 +38,15 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 
 // === JWT Authentication ===
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "CollegeERPSuperSecretKeyThatIsAtLeast32BytesLong!";
+var jwtKey = builder.Configuration["Jwt:Key"] 
+    ?? "CollegeERPSuperSecretKeyThatIsAtLeast32BytesLong!";
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-}).AddJwtBearer(options =>
+})
+.AddJwtBearer(options =>
 {
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -60,15 +62,14 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// === CORS ===
+// === CORS (temporary open for deployment) ===
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+        policy.AllowAnyOrigin()
               .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowAnyMethod();
     });
 });
 
@@ -78,20 +79,26 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "College ERP API", Version = "v1" });
+
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header. Enter: Bearer {your token}",
+        Description = "JWT Authorization header. Enter: Bearer {token}",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
             },
             Array.Empty<string>()
         }
@@ -100,21 +107,21 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// === Middleware Pipeline ===
+// === Middleware ===
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// ✅ Enable Swagger in production too (important for Render)
+app.UseSwagger();
+app.UseSwaggerUI();
 
-app.UseCors("AllowReactApp");
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
-// === Seed Database ===
+// === Seed DB ===
 await DataSeeder.SeedAsync(app.Services);
 
 app.Run();
